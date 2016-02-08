@@ -1,2 +1,2 @@
-# csc384
-# Assignments for CSC384
+# CSC384
+Assignments for CSC384
