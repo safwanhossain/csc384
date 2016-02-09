@@ -221,18 +221,11 @@ class rushhour(StateSpace):
 
     def hashable_state(self):
         '''Return a data item that can be used as a dictionary key to UNIQUELY represent the state.
-        Our Key will of the following structure: 
-        'starting x pos of car (sorted)/corresponding y val/is_horizontal/length&&....' '''
-        new_list = sorted( self.vehicle_list, key=lambda x: x[1][0], reverse=True )
-        hash_str = ''
-        for vehicle in new_list:
-            hash_str += str(vehicle[1][0]) + '/' + str(vehicle[1][1]) + '/'
-            if vehicle[3]:
-                hash_str += 'T/'
-            else:
-                hash_str += 'F/'
-            hash_str += str(vehicle[2]) + '&&'
-        return hash_str
+        Our Key will essentially be the vehicle_list but sorted on x pos and deeply
+        represented as a tuple'''
+        new_list = sorted( self.vehicle_list, key=lambda x: x[1][0], reverse=False )
+        hash_tup = tuple( tuple(prop for prop in vehicle) for vehicle in new_list )
+        return hash_tup
 
     def print_state(self):
         #DO NOT CHANGE THIS FUNCTION---it will be used in auto marking
@@ -328,79 +321,88 @@ def heur_min_moves(state):
             distance_S = m - distance_N
         return min( distance_N, distance_S )
     
+    def get_min_over_goalcars( car ):
+        car_pos = car[1]
+        length = car[2]
+        is_horizontal = car[3]
+        m, n = state.board_size[0], state.board_size[1] 
+        
+        # goal car horizontal but position not reachable
+        if is_horizontal and (car_pos[1] != goal_pos[1]):
+            return float("inf")
+        # goal car horizontal but goal position is vertical
+        elif is_horizontal and (orientation == 'N' or orientation == 'S'):
+            return float("inf")
+        elif is_horizontal:
+            if orientation == 'W':
+                return horizontal_heur( car_pos, goal_pos, n )
+            else:
+                des_pos = ( (goal_pos[0] - length + 1) % n, goal_pos[1] )
+                return horizontal_heur( car_pos, des_pos, n )
+        
+        # goal car vertical but position not reachable
+        elif (not is_horizontal) and (car_pos[0] != goal_pos[0]):
+            return float("inf")
+        # goal car vertical but goal position is horizontal
+        elif (not is_horizontal) and (orientation == 'E' or orientation == 'W'):
+            return float("inf")
+        elif (not is_horizontal):
+            if orientation == 'N':
+                return vertical_heur( car_pos, goal_pos, m )
+            else:
+                des_pos = ( goal_pos[0], (goal_pos[1] - length + 1) % m )
+                return vertical_heur( car_pos, des_pos, m )
+    
     # Already at the goal state
     if rushhour_goal_fn( state ) == True:
         return 0
     goal_pos = state.goal_entrance
     orientation = state.goal_direction
     car = None
-    
+   
+    goal_cars = []
     for vehicle in state.vehicle_list:
         if vehicle[4] == True:
-            car = vehicle
-            break
+            goal_cars.append( vehicle )
 
-    car_pos = car[1]
-    length = car[2]
-    is_horizontal = car[3]
-    m, n = state.board_size[0], state.board_size[1] 
-    
-    # goal car horizontal but position not reachable
-    if is_horizontal and (car_pos[1] != goal_pos[1]):
-        return float("inf")
-    # goal car horizontal but goal position is vertical
-    elif is_horizontal and (orientation == 'N' or orientation == 'S'):
-        return float("inf")
-    elif is_horizontal:
-        if orientation == 'W':
-            return horizontal_heur( car_pos, goal_pos, n )
-        else:
-            des_pos = ( (goal_pos[0] - length + 1) % n, goal_pos[1] )
-            return horizontal_heur( car_pos, des_pos, n )
-    
-    # goal car vertical but position not reachable
-    elif (not is_horizontal) and (car_pos[0] != goal_pos[0]):
-        return float("inf")
-    # goal car vertical but goal position is horizontal
-    elif (not is_horizontal) and (orientation == 'E' or orientation == 'W'):
-        return float("inf")
-    elif (not is_horizontal):
-        if orientation == 'N':
-            return vertical_heur( car_pos, goal_pos, m )
-        else:
-            des_pos = ( goal_pos[0], (goal_pos[1] - length + 1) % m )
-            return vertical_heur( car_pos, des_pos, m )
+    heur_vals = []
+    for car in goal_cars:
+        heur_vals.append( get_min_over_goalcars( car ) )
+    return min( heur_vals )
 
 def rushhour_goal_fn(state):
     '''Have we reached a goal state ?'''
+    
+    def car_at_goal( car ):
+        car_pos = car[1]
+        length = car[2]
+        is_horizontal = car[3]
+        if (orientation == 'N') and (is_horizontal == False) and (car_pos == goal_pos):
+            return True
+        elif (orientation == 'S') and (is_horizontal == False):
+            des_y_pos = (goal_pos[1] - length + 1) % state.board_size[0]
+            if (car_pos[0] == goal_pos[0]) and (des_y_pos == car_pos[1]):
+                return True
+        elif (orientation == 'W') and (is_horizontal == True) and (car_pos == goal_pos):
+            return True
+        elif (orientation == 'E') and (is_horizontal == True):
+            des_x_pos = (goal_pos[0] - length + 1) % state.board_size[1]
+            if (car_pos[1] == goal_pos[1]) and (des_x_pos == car_pos[0]):
+                return True
+        return False
+    
     goal_pos = state.goal_entrance
     orientation = state.goal_direction
     car = None
     
     for vehicle in state.vehicle_list:
         if vehicle[4] == True:
-            car = vehicle
-            break
-
-    car_pos = car[1]
-    length = car[2]
-    is_horizontal = car[3]
-    if (orientation == 'N') and (is_horizontal == False) and (car_pos == goal_pos):
-        return True
-    elif (orientation == 'S') and (is_horizontal == False):
-        des_y_pos = (goal_pos[1] - length + 1) % state.board_size[0]
-        if (car_pos[0] == goal_pos[0]) and (des_y_pos == car_pos[1]):
-            return True
-    elif (orientation == 'W') and (is_horizontal == True) and (car_pos == goal_pos):
-        return True
-    elif (orientation == 'E') and (is_horizontal == True):
-        des_x_pos = (goal_pos[0] - length + 1) % state.board_size[1]
-        if (car_pos[1] == goal_pos[1]) and (des_x_pos == car_pos[0]):
-            return True
+            at_goal = car_at_goal(vehicle)
+            if at_goal == True:
+                return True
     return False
 
 def make_init_state(board_size, vehicle_list, goal_entrance, goal_direction):
-#IMPLEMENT
     '''Input the following items which specify a state and return a rushhour object
        representing this initial state.
          The state's its g-value is zero
